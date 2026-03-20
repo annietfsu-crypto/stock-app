@@ -124,6 +124,8 @@ async function run(){
 
  const p1=round(P1),p2=round(P2),p3=round(P3);
 
+  function fmtPrice(p){return `$${p.toFixed(1)}`;}
+
  const spread=(p1-p3)/p2;
  let B1=adj*0.25,B2=adj*0.5,B3=adj*0.25;
  if(spread<0.05){B2+=B1;B1=0}
@@ -132,9 +134,9 @@ async function run(){
 
  out.innerHTML=`
  <div class='badge ${tr.mode==='ok'?'good':'warn'}'>${tr.msg}</div>
- ${s1>0?`<div class='order'>第1筆：${p1} / ${s1}</div>`:''}
- <div class='order'>第2筆：${p2} / ${s2}</div>
- <div class='order'>第3筆：${p3} / ${s3}</div>
+ ${s1>0?`<div class='order'>第1筆：${fmtPrice(p1)} 元 / ${s1} 股</div>`:''}
+ <div class='order'>第2筆：${fmtPrice(p2)} 元 / ${s2} 股</div>
+ <div class='order'>第3筆：${fmtPrice(p3)} 元 / ${s3} 股</div>
  `;
 
  }catch(e){out.innerHTML='錯誤'}
