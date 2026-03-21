@@ -125,8 +125,20 @@ async function run(){
  let adj=budget;
  if(tr.mode==='weak') adj=budget*0.5;
 
- const P2=(MA20+P)/2;
- const P1=Math.max(MA5,P*0.98);
+ // 新版 P1 / P2（統一：市場 + 波動）
+// 依 σ 動態決定係數（隱含股性）
+let k1, k2;
+if(sigma < 0.015){ k1 = 0.5; k2 = 1.0; }
+else if(sigma < 0.03){ k1 = 0.8; k2 = 1.5; }
+else { k1 = 1.2; k2 = 2.0; }
+
+let P1 = Math.max(MA5, P * (1 - k1 * sigma));
+let P2 = Math.max(MA20, P * (1 - k2 * sigma));
+
+// 防呆：確保順序與合理區間
+P1 = Math.min(P, P1);
+P2 = Math.min(P, P2);
+if(P1 < P2){ P1 = P2; }
  // 新版 P3 模型（結構 + 均線 + 波動）
 const sigmaAdj = 1.2 * sigma;
 const S1 = Low30;
