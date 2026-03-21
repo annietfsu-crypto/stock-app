@@ -127,7 +127,17 @@ async function run(){
 
  const P2=(MA20+P)/2;
  const P1=Math.max(MA5,P*0.98);
- const P3=Math.min(P2,Math.max(Low30,P2*(1-p.down)));
+ // 新版 P3 模型（結構 + 均線 + 波動）
+const sigmaAdj = 1.2 * sigma;
+const S1 = Low30;
+const S2 = MA60;
+const S3 = P2 * (1 - sigmaAdj);
+
+let P3_raw = Math.max(S1, S2, S3);
+let P3 = Math.min(P2, P3_raw);
+
+// 防呆底線（避免過低）
+P3 = Math.max(P3, P * 0.85);
 
  const p1=round(P1),p2=round(P2),p3=round(P3);
 
