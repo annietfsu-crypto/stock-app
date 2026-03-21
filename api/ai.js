@@ -25,10 +25,7 @@ export default async function handler(req, res) {
 產業 + 核心產品 + 近期題材
 
 【規則】
-- 只輸出一行
-- 不可換行
-- 可使用空格與標點（例如：、+）
-- 不要解釋或前言
+- 可使用空格與標點符號
 - 盡量精簡（<=20字）
 
 【範例】
@@ -39,7 +36,6 @@ IC載板廠 ABF載板 + AI需求強
 ${stockText}
 
 【輸出】
-`
                 }
               ]
             }
@@ -50,40 +46,28 @@ ${stockText}
 
     const data = await response.json();
 
-    // 🔥 Debug
     console.log("GEMINI RAW:", JSON.stringify(data));
 
+    // 👉 完全不做判斷，直接拿
     const text =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+      data?.candidates?.[0]?.content?.parts?.[0]?.text || "（沒有抓到text）";
 
-    console.log("PARSED TEXT:", text);
-
-    // ✅ 更合理的 fallback（不亂擋）
-    if (!text || text.length < 3) {
-      return res.status(200).json({
-        text: "無法取得摘要"
-      });
-    }
-
-    // 🚨 只擋明確錯誤
-    if (
-      text.includes("抱歉") ||
-      text.includes("無法") ||
-      text.includes("不知道") ||
-      text.includes("error")
-    ) {
-      return res.status(200).json({
-        text: "無法取得摘要"
-      });
-    }
-
-    res.status(200).json({ text });
+    // 🔥 直接把所有東西回給前端
+    res.status(200).json({
+      text,
+      raw: data
+    });
 
   } catch (e) {
     console.log("API ERROR:", e);
 
     res.status(200).json({
-      text: "無法取得摘要"
+      text: "API exception",
+      error: e.toString()
     });
   }
 }
+
+
+
+
