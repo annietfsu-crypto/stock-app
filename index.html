@@ -45,7 +45,7 @@ button{background:#000;color:#fff}
 <script>
 
 let stockList=[];
-let selected=null;
+let selectedStock=null;
 
 // ===== 股票清單 =====
 async function loadStocks(){
@@ -78,8 +78,8 @@ function searchStock(){
 }
 
 function selectStock(s){
+  selectedStock = s;
   document.getElementById("stock").value=`${s.stock_name} (${s.stock_id})`;
-  selected=s.stock_id;
   document.getElementById("dropdown").innerHTML="";
 }
 
@@ -99,63 +99,43 @@ async function getData(id){
   return json.data;
 }
 
-// ===== 工具 =====
-const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
-
-function std(a){
-  const m = avg(a);
-  return Math.sqrt(
-    a.reduce((sum, x) => sum + Math.pow(x - m, 2), 0) / (a.length - 1)
-  );
-}
-
-function tick(price){
-  if(price<10) return 0.01;
-  if(price<50) return 0.05;
-  if(price<100) return 0.1;
-  if(price<500) return 0.5;
-  return 1;
-}
-
-function round(price){
-  const t=tick(price);
-  return Math.round(price/t)*t;
-}
-
-// ===== AI =====
-async function getAI(name){
+// ===== AI 簡介 =====
+async function getAISummary(name, id){
   try{
-    const res = await fetch("/api/ai",{
+    const res = await fetch("/api/ai", {
       method:"POST",
-      headers:{ "Content-Type":"application/json"},
-      body:JSON.stringify({
-        messages:[
-          {role:"system",content:"輸出JSON: {summary, stockType}"},
-          {role:"user",content:`分析股票 ${name}`}
-        ]
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        name,
+        id
       })
     });
-    const json = await res.json();
-    return JSON.parse(json.choices[0].message.content);
-  }catch{
-    return {
-      summary:"產業相關公司，近期受市場題材影響",
-      stockType:null
-    };
+
+    const data = await res.json();
+    return data.text;
+
+  }catch(e){
+    return `${name}：電子相關產業，受市場需求影響`;
   }
 }
 
-// ===== 主流程 =====
+// ===== 工具 =====
+const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+
+// ===== 主程式 =====
 async function run(){
-  const result=document.getElementById("result");
-  result.innerHTML="Loading...";
 
-  const id = selected || document.getElementById("stock").value;
+  if(!selectedStock){
+    alert("請選擇股票");
+    return;
+  }
+
   const budget = Number(document.getElementById("budget").value);
+  if(!budget) return;
 
-  const data = await getData(id);
+  const data = await getData(selectedStock.stock_id);
   if(!data || data.length<30){
-    result.innerHTML="資料不足";
+    document.getElementById("result").innerHTML="資料不足";
     return;
   }
 
@@ -166,61 +146,33 @@ async function run(){
   const ma20 = avg(prices.slice(-20));
   const low30 = Math.min(...prices.slice(-30));
 
-  // ===== 股性 =====
-  let type="成長股";
-  const returns = prices.slice(1).map((p,i)=>Math.log(p/prices[i]));
-  const sigma = std(returns);
-
-  if(sigma<0.015) type="穩定股";
-  else if(sigma<0.03) type="成長股";
-  else type="題材股";
-
-  // ===== AI =====
-  const ai = await getAI(id);
-  if(ai.stockType) type = ai.stockType;
-
-  // ===== 價格 =====
-  let P2 = (ma20 + P)/2;
+  let P2 = (P + ma20)/2;
   let P1 = Math.max(ma5, P*0.98);
-  let P3 = Math.max(low30, P2*0.9);
+  let P3 = Math.min(P2, Math.max(low30, P2*0.9));
 
-  P1 = round(P1);
-  P2 = round(P2);
-  P3 = round(P3);
+  // 股數
+  const b1 = budget*0.25;
+  const b2 = budget*0.5;
+  const b3 = budget*0.25;
 
-  // ===== 判斷筆數 =====
-  let mode="三筆";
+  const n1 = Math.floor(b1 / P1);
+  const n2 = Math.floor(b2 / P2);
+  const n3 = Math.floor(b3 / P3);
 
-  if(Math.abs(P1-P2)/P <0.02){
-    mode="雙筆";
-  }
+  // AI summary
+  const summary = await getAISummary(selectedStock.stock_name, selectedStock.stock_id);
 
-  if(Math.abs(P2-P3)/P <0.02){
-    mode="單筆";
-  }
+  document.getElementById("result").innerHTML = `
+    <div class="card">
+      <div class="tag">三筆策略</div>
+      <div>${summary}</div>
+      <div>現價：$${P.toFixed(1)}</div>
 
-  // ===== UI =====
-  let html="";
-
-  html+=`<div class="tag">${type}</div>`;
-  html+=`<div>${ai.summary}</div>`;
-
-  if(mode==="單筆"){
-    html+=`<div class="warn">不適合分批，已轉單筆</div>`;
-    html+=`<div class="card">第2筆：$${P2}</div>`;
-  }
-  else if(mode==="雙筆"){
-    html+=`<div class="warn">不適合三筆，轉雙筆</div>`;
-    html+=`<div class="card">第2筆：$${P2}</div>`;
-    html+=`<div class="card">第3筆：$${P3}</div>`;
-  }
-  else{
-    html+=`<div class="card">第1筆：$${P1}</div>`;
-    html+=`<div class="card">第2筆：$${P2}</div>`;
-    html+=`<div class="card">第3筆：$${P3}</div>`;
-  }
-
-  result.innerHTML=html;
+      <div class="card">第1筆：$${P1.toFixed(1)} / ${n1} 股</div>
+      <div class="card">第2筆：$${P2.toFixed(1)} / ${n2} 股</div>
+      <div class="card">第3筆：$${P3.toFixed(1)} / ${n3} 股</div>
+    </div>
+  `;
 }
 
 </script>
