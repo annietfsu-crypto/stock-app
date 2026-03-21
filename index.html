@@ -52,6 +52,7 @@ button{
   padding:4px 8px;
   border-radius:6px;
   display:inline-block;
+  margin-right:6px;
   margin-bottom:6px;
 }
 
@@ -80,7 +81,7 @@ button{
 let stockList=[];
 let selected=null;
 
-// ===== 載入股票清單 =====
+// ===== 載入股票 =====
 async function loadStocks(){
   const res = await fetch("https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo");
   const json = await res.json();
@@ -125,16 +126,23 @@ function enter(e){
   }
 }
 
-// ===== 抓價格 =====
-async function getPrice(id){
+// ===== 抓價格 + 歷史 =====
+async function getPriceAndHistory(id){
   const res = await fetch(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${id}&start_date=2024-01-01`);
   const json = await res.json();
   const data = json.data;
-  return data[data.length-1].close;
+
+  const recent = data.slice(-60);
+  const prices = recent.map(d=>d.close);
+
+  return {
+    price: prices[prices.length-1],
+    prices
+  };
 }
 
 // ===== AI =====
-async function getAIData(name,id){
+async function getAISummary(name,id){
   try{
     const res = await fetch("/api/ai",{
       method:"POST",
@@ -143,19 +151,11 @@ async function getAIData(name,id){
     });
 
     const data = await res.json();
-    console.log("AI:",data);
 
-    return data;
+    return data.summary || "無法取得摘要";
 
   }catch(e){
-    return {
-      summary: "無法取得摘要",
-      stockType: "growth",
-      k1: 0.01,
-      k2: 0.03,
-      k3: 0.06,
-      position: 0.5
-    };
+    return "無法取得摘要";
   }
 }
 
@@ -176,40 +176,82 @@ async function run(){
   const id = selected.stock_id;
   const name = selected.stock_name;
 
-  const price = await getPrice(id);
-  const ai = await getAIData(name,id);
+  const { price, prices } = await getPriceAndHistory(id);
+  const summary = await getAISummary(name,id);
 
-  // ===== AI 資料 =====
-  const summary = ai.summary || "無摘要";
-  let k1 = Number(ai.k1) || 0.01;
-  let k2 = Number(ai.k2) || 0.03;
-  let k3 = Number(ai.k3) || 0.06;
-  let position = Number(ai.position) || 0.5;
-  const stockType = ai.stockType || "growth";
+  // ===== 波動 =====
+  const high = Math.max(...prices);
+  const low = Math.min(...prices);
+  const volatility = (high - low) / price;
 
-  const P = price;
+  // ===== 股性 =====
+  let stockType = "";
+  if (volatility < 0.02) {
+    stockType = "穩定股";
+  } else if (volatility < 0.05) {
+    stockType = "成長股";
+  } else {
+    stockType = "題材股";
+  }
 
-  // ===== 動態價格 =====
-  const P1 = P * (1 - k1);
-  const P2 = P * (1 - k2);
-  const P3 = P * (1 - k3);
+  // ===== 策略 =====
+  let strategy = "";
+  let k1, k2, k3;
+  let position;
 
-  // ===== 資金分配 =====
-  const total = budget * position;
+  if (stockType === "穩定股") {
+    strategy = "三筆";
+    k1 = 0.02;
+    k2 = 0.04;
+    k3 = 0.06;
+    position = [0.4, 0.3, 0.3];
+  }
+  else if (stockType === "成長股") {
+    strategy = "三筆";
+    k1 = 0.03;
+    k2 = 0.06;
+    k3 = 0.10;
+    position = [0.3, 0.4, 0.3];
+  }
+  else {
+    strategy = "兩筆";
+    k1 = 0.05;
+    k2 = 0.12;
+    position = [0.5, 0.5];
+  }
 
-  const s1 = Math.floor((total*0.3)/P1);
-  const s2 = Math.floor((total*0.4)/P2);
-  const s3 = Math.floor((total*0.3)/P3);
+  // ===== 價格 =====
+  const P1 = price * (1 - k1);
+  const P2 = price * (1 - k2);
+  const P3 = k3 ? price * (1 - k3) : null;
 
+  // ===== 股數 =====
+  const s1 = Math.floor((budget * position[0]) / P1);
+  const s2 = Math.floor((budget * position[1]) / P2);
+  const s3 = P3 ? Math.floor((budget * position[2]) / P3) : 0;
+
+  // ===== 動態訂單 =====
+  let ordersHTML = `
+    <div class="card">第1筆：$${P1.toFixed(1)} / ${s1} 股</div>
+    <div class="card">第2筆：$${P2.toFixed(1)} / ${s2} 股</div>
+  `;
+
+  if (strategy === "三筆") {
+    ordersHTML += `
+      <div class="card">第3筆：$${P3.toFixed(1)} / ${s3} 股</div>
+    `;
+  }
+
+  // ===== UI =====
   document.getElementById("result").innerHTML = `
     <div class="card">
       <div class="tag">${stockType}</div>
-      <div>${name} (${id})：${summary}</div>
-      <div>現價：$${P.toFixed(1)}</div>
+      <div class="tag">${strategy}策略</div>
 
-      <div class="card">第1筆：$${P1.toFixed(1)} / ${s1} 股</div>
-      <div class="card">第2筆：$${P2.toFixed(1)} / ${s2} 股</div>
-      <div class="card">第3筆：$${P3.toFixed(1)} / ${s3} 股</div>
+      <div>個股關鍵字：${summary}</div>
+      <div>現價：$${price.toFixed(1)}</div>
+
+      ${ordersHTML}
     </div>
   `;
 }
