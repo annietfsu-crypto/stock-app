@@ -120,11 +120,7 @@ async function run(){
  const p=pct(stockType);
  const tr=trend(P,MA20,MA60);
 
- if(tr.mode==='avoid'){if((P1 - P3) / P < 0.03){
-  out.innerHTML = '⚠️ 不適合分批進場';
-  return;
-}
-out.innerHTML = `<div class='badge warn'>${tr.msg}</div>`;return}
+ if(tr.mode==='avoid'){out.innerHTML = `<div class='badge warn'>${tr.msg}</div>`;return}
 
  let adj=budget;
  if(tr.mode==='weak') adj=budget*0.5;
@@ -155,20 +151,41 @@ let P3 = Math.min(P2, P3_raw);
 // 防呆底線（避免過低）
 P3 = Math.max(P3, P * 0.85);
 
- const p1=round(P1),p2=round(P2),p3=round(P3);
+// ✅ 分批有效性判斷（升級：三筆 / 雙筆 / 單筆）
+const p1=round(P1),p2=round(P2),p3=round(P3);
+
+const gap12 = (p1 - p2) / P;
+const gap23 = (p2 - p3) / P;
+
+let mode = 'three';
+
+if(gap12 < 0.02 && gap23 < 0.02){
+  mode = 'one';
+}else if(gap12 < 0.02 || gap23 < 0.02){
+  mode = 'two';
+}
 
  const spread=(p1-p3)/p2;
- let B1=adj*0.25,B2=adj*0.5,B3=adj*0.25;
- if(spread<0.05){B2+=B1;B1=0}
+let B1=adj*0.25,B2=adj*0.5,B3=adj*0.25;
 
- const s1=shares(B1,p1),s2=shares(B2,p2),s3=shares(B3,p3);
+if(mode==='two'){
+  B2 += B1;
+  B1 = 0;
+}else if(mode==='one'){
+  B2 = adj;
+  B1 = 0;
+  B3 = 0;
+}
+
+const s1=shares(B1,p1),s2=shares(B2,p2),s3=shares(B3,p3);
 
  out.innerHTML=`
+ ${mode==='three' ? '' : `<div class='badge warn'>⚠️ 不適合分批，已自動轉為${mode==='two'?'雙筆':'單筆'}策略</div>`}
  <div class='badge ${tr.mode==='ok'?'good':'warn'}'>${tr.msg}</div>
  <div class='meta'>股性：${stockType} ｜ 現價：${fmtPrice(P)}</div>
- ${s1>0?`<div class='order order1'>第1筆：${fmtPrice(p1)}（${diffPct(p1,P)}%） 元 / ${s1} 股</div>`:''}
- <div class='order order2'>第2筆：${fmtPrice(p2)}（${diffPct(p2,P)}%） 元 / ${s2} 股</div>
- <div class='order order3'>第3筆：${fmtPrice(p3)}（${diffPct(p3,P)}%） 元 / ${s3} 股</div>
+ ${mode==='three' && s1>0?`<div class='order order1'>第1筆：${fmtPrice(p1)}（${diffPct(p1,P)}%） 元 / ${s1} 股</div>`:''}
+ ${mode!=='one'?`<div class='order order2'>第2筆：${fmtPrice(p2)}（${diffPct(p2,P)}%） 元 / ${s2} 股</div>`:''}
+ <div class='order order3'>${mode==='one'?'第2筆':'第3筆'}：${fmtPrice(mode==='one'?p2:p3)}（${diffPct(mode==='one'?p2:p3,P)}%） 元 / ${mode==='one'?s2:s3} 股</div>
  `;
 
  }catch(e){out.innerHTML='錯誤'}
