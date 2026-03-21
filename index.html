@@ -9,6 +9,7 @@
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system;background:#fff;color:#000}
 .container{max-width:500px;margin:40px auto;padding:20px}
+
 input,button{
   width:100%;
   padding:14px;
@@ -17,13 +18,44 @@ input,button{
   border-radius:10px;
   font-size:16px;
 }
-button{background:#000;color:#fff}
-.dropdown{border:1px solid #ddd;border-radius:10px;max-height:150px;overflow:auto}
-.item{padding:10px;cursor:pointer}
-.item:hover{background:#eee}
-.card{border:1px solid #eee;border-radius:12px;padding:12px;margin-top:10px}
+
+button{
+  background:#000;
+  color:#fff;
+}
+
+.dropdown{
+  border:1px solid #ddd;
+  border-radius:10px;
+  max-height:150px;
+  overflow:auto;
+}
+
+.item{
+  padding:10px;
+  cursor:pointer;
+}
+
+.item:hover{
+  background:#eee;
+}
+
+.card{
+  border:1px solid #eee;
+  border-radius:12px;
+  padding:12px;
+  margin-top:10px;
+}
+
+.tag{
+  border:1px solid #000;
+  padding:4px 8px;
+  border-radius:6px;
+  display:inline-block;
+  margin-bottom:6px;
+}
+
 .warn{color:#d00}
-.tag{border:1px solid #000;padding:4px 8px;border-radius:6px;display:inline-block;margin-bottom:6px}
 </style>
 </head>
 
@@ -36,6 +68,7 @@ button{background:#000;color:#fff}
 <div id="dropdown" class="dropdown"></div>
 
 <input id="budget" placeholder="輸入預算" onkeydown="enter(event)">
+
 <button onclick="run()">計算</button>
 
 <div id="result"></div>
@@ -45,9 +78,9 @@ button{background:#000;color:#fff}
 <script>
 
 let stockList=[];
-let selectedStock=null;
+let selected=null;
 
-// ===== 股票清單 =====
+// ===== 載入股票清單 =====
 async function loadStocks(){
   const res = await fetch("https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockInfo");
   const json = await res.json();
@@ -78,12 +111,12 @@ function searchStock(){
 }
 
 function selectStock(s){
-  selectedStock = s;
   document.getElementById("stock").value=`${s.stock_name} (${s.stock_id})`;
+  selected=s;
   document.getElementById("dropdown").innerHTML="";
 }
 
-// Enter
+// ===== Enter =====
 function enter(e){
   if(e.key==="Enter"){
     const f=document.getElementById("first");
@@ -93,84 +126,76 @@ function enter(e){
 }
 
 // ===== 抓價格 =====
-async function getData(id){
+async function getPrice(id){
   const res = await fetch(`https://api.finmindtrade.com/api/v4/data?dataset=TaiwanStockPrice&data_id=${id}&start_date=2024-01-01`);
   const json = await res.json();
-  return json.data;
+  const data = json.data;
+  return data[data.length-1].close;
 }
 
-// ===== AI 簡介 =====
-async function getAISummary(name, id){
+// ===== AI 摘要（Gemini）=====
+async function getAISummary(name,id){
   try{
-    const res = await fetch("/api/ai", {
+    const res = await fetch("/api/ai",{
       method:"POST",
       headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({
-        name,
-        id
-      })
+      body:JSON.stringify({name,id})
     });
 
     const data = await res.json();
+    console.log("AI:",data);
+
+    if(!data.text || data.text.includes("❌")){
+      return "無法取得摘要";
+    }
+
     return data.text;
 
   }catch(e){
-    return `${name}：電子相關產業，受市場需求影響`;
+    return "無法取得摘要";
   }
 }
 
-// ===== 工具 =====
-const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
-
-// ===== 主程式 =====
+// ===== 主邏輯 =====
 async function run(){
 
-  if(!selectedStock){
+  if(!selected){
     alert("請選擇股票");
     return;
   }
 
   const budget = Number(document.getElementById("budget").value);
-  if(!budget) return;
-
-  const data = await getData(selectedStock.stock_id);
-  if(!data || data.length<30){
-    document.getElementById("result").innerHTML="資料不足";
+  if(!budget){
+    alert("請輸入預算");
     return;
   }
 
-  const prices = data.map(d=>d.close);
-  const P = prices.at(-1);
+  const id = selected.stock_id;
+  const name = selected.stock_name;
 
-  const ma5 = avg(prices.slice(-5));
-  const ma20 = avg(prices.slice(-20));
-  const low30 = Math.min(...prices.slice(-30));
+  const price = await getPrice(id);
+  const summary = await getAISummary(name,id);
 
-  let P2 = (P + ma20)/2;
-  let P1 = Math.max(ma5, P*0.98);
-  let P3 = Math.min(P2, Math.max(low30, P2*0.9));
+  // ===== 策略（簡化版）=====
+  const P = price;
 
-  // 股數
-  const b1 = budget*0.25;
-  const b2 = budget*0.5;
-  const b3 = budget*0.25;
+  const P1 = P * 0.98;
+  const P2 = P * 0.94;
+  const P3 = P * 0.85;
 
-  const n1 = Math.floor(b1 / P1);
-  const n2 = Math.floor(b2 / P2);
-  const n3 = Math.floor(b3 / P3);
-
-  // AI summary
-  const summary = await getAISummary(selectedStock.stock_name, selectedStock.stock_id);
+  const s1 = Math.floor((budget*0.3)/P1);
+  const s2 = Math.floor((budget*0.4)/P2);
+  const s3 = Math.floor((budget*0.3)/P3);
 
   document.getElementById("result").innerHTML = `
     <div class="card">
       <div class="tag">三筆策略</div>
-      <div>${summary}</div>
+      <div>${name} (${id})：${summary}</div>
       <div>現價：$${P.toFixed(1)}</div>
 
-      <div class="card">第1筆：$${P1.toFixed(1)} / ${n1} 股</div>
-      <div class="card">第2筆：$${P2.toFixed(1)} / ${n2} 股</div>
-      <div class="card">第3筆：$${P3.toFixed(1)} / ${n3} 股</div>
+      <div class="card">第1筆：$${P1.toFixed(1)} / ${s1} 股</div>
+      <div class="card">第2筆：$${P2.toFixed(1)} / ${s2} 股</div>
+      <div class="card">第3筆：$${P3.toFixed(1)} / ${s3} 股</div>
     </div>
   `;
 }
