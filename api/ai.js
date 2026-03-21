@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  console.log("KEY:", process.env.GEMINI_API_KEY);
   const { name, id } = req.body;
 
   const stockText = `${name || ""}${id ? `(${id})` : ""}`;
@@ -36,7 +35,8 @@ IC載板廠 ABF載板 + AI需求強
 【公司】
 ${stockText}
 
-【輸出】
+請直接輸出摘要：
+`
                 }
               ]
             }
@@ -49,11 +49,11 @@ ${stockText}
 
     console.log("GEMINI RAW:", JSON.stringify(data));
 
-    // 👉 完全不做判斷，直接拿
+    // 👉 直接抓，不做限制（debug 用）
     const text =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text || "（沒有抓到text）";
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "（沒有抓到text）";
 
-    // 🔥 直接把所有東西回給前端
     res.status(200).json({
       text,
       raw: data
@@ -68,7 +68,3 @@ ${stockText}
     });
   }
 }
-
-
-
-
