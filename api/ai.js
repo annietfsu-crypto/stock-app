@@ -1,31 +1,9 @@
 export default async function handler(req, res) {
+  const { name, id } = req.body;
+
+  const stockText = `${name || ""}${id ? `(${id})` : ""}`;
+
   try {
-    const { name, id } = req.body;
-
-    const company = name && id ? `${name}(${id})` : (name || id || "未知公司");
-
-    const prompt = `
-你是一位專業的台股分析師，專精半導體與電子供應鏈。
-當用戶給你一個台股公司名稱或股票代號時，請嚴格遵守以下規則輸出僅一行摘要（總字數必須低於20字，絕對無任何空格、換行或多餘標點）：
-
-輸出格式必須完全符合：
-【該公司主要產業】+【核心具體產品名稱】+【近3個月或當前最熱門成長題材/股價表現】
-
-規則細節：
-1. 產業要具體（例如：IC載板廠、砷化鎵晶圓代工廠），不可用泛稱如電子、半導體
-2. 核心產品必須明確列出實際產品（例如：ABF載板、GaAs功率放大器、VCSEL光電元件）
-3. 題材要具體（例如：AI伺服器需求、低軌衛星、光通訊）
-4. 整句不超過20字
-5. 不可有空格
-6. 只輸出一行，不可有任何前言或解釋
-
-如果無法確定公司業務，請只輸出：
-UNKNOWN
-
-現在公司是：${company}
-請直接輸出結果：
-`;
-
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
@@ -36,7 +14,34 @@ UNKNOWN
         body: JSON.stringify({
           contents: [
             {
-              parts: [{ text: prompt }]
+              parts: [
+                {
+                  text: `
+你是一位專業的台股分析師，專精半導體與電子供應鏈。
+
+請針對以下公司輸出「一行摘要」（20字內）：
+
+【格式】
+產業 + 核心產品 + 近期題材
+
+【規則】
+- 只輸出一行
+- 不可換行
+- 可使用空格與標點（例如：、+）
+- 不要解釋或前言
+- 盡量精簡（<=20字）
+
+【範例】
+IC載板廠 ABF載板 + AI需求強
+砷化鎵代工 GaAs PA + 光通訊成長
+
+【公司】
+${stockText}
+
+【輸出】
+`
+                }
+              ]
             }
           ]
         })
@@ -45,32 +50,39 @@ UNKNOWN
 
     const data = await response.json();
 
+    // 🔥 Debug
     console.log("GEMINI RAW:", JSON.stringify(data));
 
-    let text =
+    const text =
       data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
 
-    // ===== 🔥 嚴格驗證（核心） =====
+    console.log("PARSED TEXT:", text);
 
-    const isInvalid =
-      !text ||
-      text.includes("UNKNOWN") ||
-      text.length > 25 || // 超長直接當錯
-      text.includes(" ") || // 有空格不合規
-      text.includes("\n") || // 多行不合規
-      text.includes("電子") || // 過度泛化
-      text.includes("半導體");
-
-    if (isInvalid) {
-      text = "無法取得摘要";
+    // ✅ 更合理的 fallback（不亂擋）
+    if (!text || text.length < 3) {
+      return res.status(200).json({
+        text: "無法取得摘要"
+      });
     }
 
-    return res.status(200).json({ text });
+    // 🚨 只擋明確錯誤
+    if (
+      text.includes("抱歉") ||
+      text.includes("無法") ||
+      text.includes("不知道") ||
+      text.includes("error")
+    ) {
+      return res.status(200).json({
+        text: "無法取得摘要"
+      });
+    }
+
+    res.status(200).json({ text });
 
   } catch (e) {
-    console.error("AI ERROR:", e);
+    console.log("API ERROR:", e);
 
-    return res.status(200).json({
+    res.status(200).json({
       text: "無法取得摘要"
     });
   }
