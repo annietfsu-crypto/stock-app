@@ -5,7 +5,7 @@ export default async function handler(req, res) {
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: {
@@ -35,8 +35,8 @@ IC載板廠 ABF載板 + AI需求強
 【公司】
 ${stockText}
 
-請直接輸出摘要：
-`
+【輸出】
+                  `
                 }
               ]
             }
@@ -47,11 +47,17 @@ ${stockText}
 
     const data = await response.json();
 
+    // 🔍 Debug：完整回傳
     console.log("GEMINI RAW:", JSON.stringify(data));
 
-    const text =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "（沒有抓到text）";
+    // ✅ 安全抓取（避免 undefined）
+    let text =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    // 🔥 fallback：如果抓不到，就把整包回傳（方便 debug）
+    if (!text) {
+      text = "（沒有抓到text）";
+    }
 
     res.status(200).json({
       text,
