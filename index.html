@@ -101,6 +101,128 @@ async function getData(id){
 
 // ===== 工具 =====
 const avg=a=>a.reduce((x,y)=>x+y,0)/a.length;
+
 function std(a){
-  const m=avg(a);
-  return Math.sqrt(a.reduce((x
+  const m = avg(a);
+  return Math.sqrt(
+    a.reduce((sum, x) => sum + Math.pow(x - m, 2), 0) / (a.length - 1)
+  );
+}
+
+function tick(price){
+  if(price<10) return 0.01;
+  if(price<50) return 0.05;
+  if(price<100) return 0.1;
+  if(price<500) return 0.5;
+  return 1;
+}
+
+function round(price){
+  const t=tick(price);
+  return Math.round(price/t)*t;
+}
+
+// ===== AI =====
+async function getAI(name){
+  try{
+    const res = await fetch("/api/ai",{
+      method:"POST",
+      headers:{ "Content-Type":"application/json"},
+      body:JSON.stringify({
+        messages:[
+          {role:"system",content:"輸出JSON: {summary, stockType}"},
+          {role:"user",content:`分析股票 ${name}`}
+        ]
+      })
+    });
+    const json = await res.json();
+    return JSON.parse(json.choices[0].message.content);
+  }catch{
+    return {
+      summary:"產業相關公司，近期受市場題材影響",
+      stockType:null
+    };
+  }
+}
+
+// ===== 主流程 =====
+async function run(){
+  const result=document.getElementById("result");
+  result.innerHTML="Loading...";
+
+  const id = selected || document.getElementById("stock").value;
+  const budget = Number(document.getElementById("budget").value);
+
+  const data = await getData(id);
+  if(!data || data.length<30){
+    result.innerHTML="資料不足";
+    return;
+  }
+
+  const prices = data.map(d=>d.close);
+  const P = prices.at(-1);
+
+  const ma5 = avg(prices.slice(-5));
+  const ma20 = avg(prices.slice(-20));
+  const low30 = Math.min(...prices.slice(-30));
+
+  // ===== 股性 =====
+  let type="成長股";
+  const returns = prices.slice(1).map((p,i)=>Math.log(p/prices[i]));
+  const sigma = std(returns);
+
+  if(sigma<0.015) type="穩定股";
+  else if(sigma<0.03) type="成長股";
+  else type="題材股";
+
+  // ===== AI =====
+  const ai = await getAI(id);
+  if(ai.stockType) type = ai.stockType;
+
+  // ===== 價格 =====
+  let P2 = (ma20 + P)/2;
+  let P1 = Math.max(ma5, P*0.98);
+  let P3 = Math.max(low30, P2*0.9);
+
+  P1 = round(P1);
+  P2 = round(P2);
+  P3 = round(P3);
+
+  // ===== 判斷筆數 =====
+  let mode="三筆";
+
+  if(Math.abs(P1-P2)/P <0.02){
+    mode="雙筆";
+  }
+
+  if(Math.abs(P2-P3)/P <0.02){
+    mode="單筆";
+  }
+
+  // ===== UI =====
+  let html="";
+
+  html+=`<div class="tag">${type}</div>`;
+  html+=`<div>${ai.summary}</div>`;
+
+  if(mode==="單筆"){
+    html+=`<div class="warn">不適合分批，已轉單筆</div>`;
+    html+=`<div class="card">第2筆：$${P2}</div>`;
+  }
+  else if(mode==="雙筆"){
+    html+=`<div class="warn">不適合三筆，轉雙筆</div>`;
+    html+=`<div class="card">第2筆：$${P2}</div>`;
+    html+=`<div class="card">第3筆：$${P3}</div>`;
+  }
+  else{
+    html+=`<div class="card">第1筆：$${P1}</div>`;
+    html+=`<div class="card">第2筆：$${P2}</div>`;
+    html+=`<div class="card">第3筆：$${P3}</div>`;
+  }
+
+  result.innerHTML=html;
+}
+
+</script>
+</body>
+</html>
