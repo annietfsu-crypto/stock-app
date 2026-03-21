@@ -133,8 +133,8 @@ async function getPrice(id){
   return data[data.length-1].close;
 }
 
-// ===== AI 摘要（Gemini）=====
-async function getAISummary(name,id){
+// ===== AI =====
+async function getAIData(name,id){
   try{
     const res = await fetch("/api/ai",{
       method:"POST",
@@ -145,14 +145,17 @@ async function getAISummary(name,id){
     const data = await res.json();
     console.log("AI:",data);
 
-    if(!data.text || data.text.includes("❌")){
-      return "無法取得摘要";
-    }
-
-    return data.text;
+    return data;
 
   }catch(e){
-    return "無法取得摘要";
+    return {
+      summary: "無法取得摘要",
+      stockType: "growth",
+      k1: 0.01,
+      k2: 0.03,
+      k3: 0.06,
+      position: 0.5
+    };
   }
 }
 
@@ -174,22 +177,33 @@ async function run(){
   const name = selected.stock_name;
 
   const price = await getPrice(id);
-  const summary = await getAISummary(name,id);
+  const ai = await getAIData(name,id);
 
-  // ===== 策略（簡化版）=====
+  // ===== AI 資料 =====
+  const summary = ai.summary || "無摘要";
+  let k1 = Number(ai.k1) || 0.01;
+  let k2 = Number(ai.k2) || 0.03;
+  let k3 = Number(ai.k3) || 0.06;
+  let position = Number(ai.position) || 0.5;
+  const stockType = ai.stockType || "growth";
+
   const P = price;
 
-  const P1 = P * 0.98;
-  const P2 = P * 0.94;
-  const P3 = P * 0.85;
+  // ===== 動態價格 =====
+  const P1 = P * (1 - k1);
+  const P2 = P * (1 - k2);
+  const P3 = P * (1 - k3);
 
-  const s1 = Math.floor((budget*0.3)/P1);
-  const s2 = Math.floor((budget*0.4)/P2);
-  const s3 = Math.floor((budget*0.3)/P3);
+  // ===== 資金分配 =====
+  const total = budget * position;
+
+  const s1 = Math.floor((total*0.3)/P1);
+  const s2 = Math.floor((total*0.4)/P2);
+  const s3 = Math.floor((total*0.3)/P3);
 
   document.getElementById("result").innerHTML = `
     <div class="card">
-      <div class="tag">三筆策略</div>
+      <div class="tag">${stockType}</div>
       <div>${name} (${id})：${summary}</div>
       <div>現價：$${P.toFixed(1)}</div>
 
