@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+  console.log("KEY:", process.env.GEMINI_API_KEY);
   const { name, id } = req.body;
 
   const stockText = `${name || ""}${id ? `(${id})` : ""}`;
