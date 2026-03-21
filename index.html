@@ -47,13 +47,14 @@ button{
   margin-top:10px;
 }
 
+/* ✅ 優化 tag */
 .tag{
   border:1px solid #000;
-  padding:4px 8px;
-  border-radius:6px;
+  padding:4px 10px;
+  border-radius:999px;
   display:inline-block;
   margin-right:6px;
-  margin-bottom:6px;
+  font-size:13px;
 }
 
 .warn{color:#d00}
@@ -151,7 +152,6 @@ async function getAISummary(name,id){
     });
 
     const data = await res.json();
-
     return data.summary || "無法取得摘要";
 
   }catch(e){
@@ -179,10 +179,13 @@ async function run(){
   const { price, prices } = await getPriceAndHistory(id);
   const summary = await getAISummary(name,id);
 
-  // ===== 波動 =====
-  const high = Math.max(...prices);
-  const low = Math.min(...prices);
-  const volatility = (high - low) / price;
+  // ✅ 改成「平均日波動」
+  let changes = [];
+  for (let i = 1; i < prices.length; i++) {
+    const change = Math.abs(prices[i] - prices[i-1]) / prices[i-1];
+    changes.push(change);
+  }
+  const volatility = changes.reduce((a,b)=>a+b,0) / changes.length;
 
   // ===== 股性 =====
   let stockType = "";
