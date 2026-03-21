@@ -101,7 +101,22 @@ function trend(P,MA20,MA60){
 async function run(){
  const budget=Number(document.getElementById('budget').value);
  const out=document.getElementById('output');
- if(!selectedSymbol){out.innerHTML='請選擇股票';return}
+ 
+ 
+ if(!selectedSymbol){
+  const val = document.getElementById('symbol').value;
+  const match = val.match(/\((\d+)\)/);
+
+  if(match){
+    selectedSymbol = match[1];
+  } else {
+    out.innerHTML='請選擇股票';
+    return;
+  }
+ }
+
+
+ 
  out.innerHTML='分析中...';
 
  try{
