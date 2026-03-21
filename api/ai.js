@@ -5,7 +5,7 @@ export default async function handler(req, res) {
 
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: "POST",
         headers: {
@@ -49,7 +49,6 @@ ${stockText}
 
     console.log("GEMINI RAW:", JSON.stringify(data));
 
-    // 👉 直接抓，不做限制（debug 用）
     const text =
       data?.candidates?.[0]?.content?.parts?.[0]?.text ||
       "（沒有抓到text）";
